@@ -5,6 +5,7 @@ import torch
 import numpy as np
 
 app = Flask(__name__)
+
 # Load model and label encoder
 @app.before_first_request
 def load_model_and_label_encoder():
@@ -13,9 +14,13 @@ def load_model_and_label_encoder():
     label_encoder = LabelEncoder()
     label_encoder.classes_ = np.load('./label_encoder_classes.npy', allow_pickle=True)
     tokenizer = BertTokenizer.from_pretrained("./tokenizer")  # Load tokenizer from local file
+
 @app.route('/predict', methods=['POST'])
 def predict():
     user_input_symptom = request.json.get('symptom')
+    if not user_input_symptom:
+        return jsonify({'error': 'Please provide a symptom.'}), 400
+
     user_input_encoding = tokenizer(user_input_symptom, padding=True, truncation=True, return_tensors='pt', max_length=512, return_attention_mask=True, return_token_type_ids=True)
 
     with torch.no_grad():
@@ -25,11 +30,10 @@ def predict():
         predicted_diseases = label_encoder.inverse_transform(predicted_labels)
         predicted_probabilities = probabilities[predicted_labels]
 
-    predictions = []
-    for disease, probability in zip(predicted_diseases, predicted_probabilities):
-        predictions.append({'disease': disease, 'probability': probability * 100})
+    predictions = [{'disease': disease, 'probability': probability * 100} for disease, probability in zip(predicted_diseases, predicted_probabilities)]
 
     return jsonify({'predictions': predictions})
 
+# Render expects the app to be served using Gunicorn
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(debug=True)
